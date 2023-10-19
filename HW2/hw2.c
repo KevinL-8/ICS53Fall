@@ -10,10 +10,6 @@
 #include <fcntl.h>
 
 
-void quit()
-{
-    exit(0);
-}
 
 void parseline(char *source, char *dest[128])
 {
@@ -28,24 +24,42 @@ void parseline(char *source, char *dest[128])
     }
 }
 
+void eval(char * instruct) {
+    char * argv[128];
+    instruct[strlen(instruct)] = '\0';
+    parseline(instruct, argv);
+    if(strcmp(argv[0], "cd") == 0){
+        if(chdir(argv[1]) == 0){
+            printf("Changed directory to %s\n", argv[1]);
+        }else{
+            perror("chdir");
+        }
+    }
+    else if(strcmp(argv[0], "pwd") == 0){
+        char buf[1024];
+        if(getcwd(buf, sizeof(buf)) != NULL){
+            printf("%s\n", buf);
+        }else{
+            perror("getcwd error");
+        }
+    }
+    else if(strcmp(argv[0], "quit") == 0){
+        exit(0);
+    }
+}
+
 int main()
 {
     char instruct[128];
     while(1)
     {
         printf("prompt> ");
-        char * argv[128];
         fgets(instruct, 128, stdin);
-        instruct[strlen(instruct)] = '\0';
-        parseline(instruct, argv);
-        if(strcmp(argv[0], "cd") == 0){
-            if(chdir(argv[1]) == 0){
-                printf("Changed directory to %s\n", argv[1]);
-            }else{
-                perror("chdir");
-            }
+        if(feof(stdin)){
+            exit(0);
         }
-        break;
+
+        eval(instruct);
     }
     return 0;
 }
