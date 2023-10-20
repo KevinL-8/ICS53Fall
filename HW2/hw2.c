@@ -11,21 +11,49 @@
 
 
 
-void parseline(char *source, char *dest[128])
+int parseline(char *source, char *dest[128])
 {
+    // printf("into the paresline");
     char * saveptr;
     char * action = strtok_r(source, " \n\t", &saveptr);
     int i = 0;
     while(action != NULL)
     {
-        dest[i] = action;
-        ++i;
+        // printf("into the while loop in the parseline");
+        dest[i++] = action;
         action = strtok_r(NULL, " \n\t", &saveptr);
+    }
+    dest[i] = NULL;
+    if(strcmp(dest[i-1], "&") == 0){
+        return 1;
+    }
+    else{
+        return 0;
+    }
+}
+
+void quit(){
+    exit(0);
+}
+
+void waiting4pid(pid_t processID){
+    int waitCondition = WUNTRACED | WCONTINUED;
+    int currentState;
+    pid_t childpid;
+    childpid = waitpid(processID, &currentState, waitCondition);
+    if(WIFSIGNALED(currentState)){
+        printf("\n currentState = Child Exited!\n");
+    }
+    if(WIFSTOPPED(currentState)){
+        printf("\n currentState = Child stopped!\n");
     }
 }
 
 void eval(char * instruct) {
     char * argv[128];
+    int bg;
+    pid_t pid;
+    // printf("here");
     instruct[strlen(instruct)] = '\0';
     parseline(instruct, argv);
     if(strcmp(argv[0], "cd") == 0){
@@ -44,22 +72,43 @@ void eval(char * instruct) {
         }
     }
     else if(strcmp(argv[0], "quit") == 0){
-        exit(0);
+        quit();
+    }
+    else
+    {
+        if((pid = fork()) == 0){
+            if(execvp(argv[0], argv) < 0){
+                if(execv(argv[0], argv) < 0){
+                    perror("execv");
+                    exit(0);  
+                }
+            }
+        }
+        else{
+            waiting4pid(pid);
+        }
+    // }else if(bg == 0){
+    //     int status;
+    //     if(waitpid(pid, &status, 0) < 0){
+    //         printf("%s: Command not found.\n", argv[0]);
+    //     }
     }
 }
 
 int main()
 {
-    char instruct[128];
+    int proc_id[1000];
     while(1)
     {
+        char instruct[128];
         printf("prompt> ");
         fgets(instruct, 128, stdin);
         if(feof(stdin)){
             exit(0);
         }
-
-        eval(instruct);
+        if(instruct[0] != '\n'){
+            eval(instruct);
+        }
     }
     return 0;
 }
