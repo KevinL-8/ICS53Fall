@@ -9,7 +9,7 @@
 #include <signal.h>
 #include <fcntl.h>
 
-
+pid_t pid;
 
 int parseline(char *source, char *dest[128])
 {
@@ -36,13 +36,23 @@ void quit(){
     exit(0);
 }
 
+void sigint_handler(int sig_num){
+    if(pid > 0){
+        kill(pid, SIGINT);
+    }
+}
+
 void waiting4pid(pid_t processID){
+    // printf("Child pid: %d", processID);
     int waitCondition = WUNTRACED | WCONTINUED;
     int currentState;
     pid_t childpid;
     childpid = waitpid(processID, &currentState, waitCondition);
+    if(WIFEXITED(currentState)){
+        printf("\n currentState = child exited normally!\n");
+    }
     if(WIFSIGNALED(currentState)){
-        printf("\n currentState = Child Exited!\n");
+        printf("\n currentState = Child exited with signal!\n");
     }
     if(WIFSTOPPED(currentState)){
         printf("\n currentState = Child stopped!\n");
@@ -52,7 +62,6 @@ void waiting4pid(pid_t processID){
 void eval(char * instruct) {
     char * argv[128];
     int bg;
-    pid_t pid;
     // printf("here");
     instruct[strlen(instruct)] = '\0';
     parseline(instruct, argv);
@@ -74,7 +83,7 @@ void eval(char * instruct) {
     else if(strcmp(argv[0], "quit") == 0){
         quit();
     }
-    else
+    else if(bg == 0)
     {
         if((pid = fork()) == 0){
             if(execvp(argv[0], argv) < 0){
@@ -98,6 +107,7 @@ void eval(char * instruct) {
 int main()
 {
     int proc_id[1000];
+    signal(SIGINT, sigint_handler);
     while(1)
     {
         char instruct[128];

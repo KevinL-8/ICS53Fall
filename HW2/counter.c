@@ -3,7 +3,7 @@
 
  int main(){
     unsigned int i = 0;
-    while(1)
+    while(i < 10)
     {
         printf("Counter: %d\n", i);
         ++i;
