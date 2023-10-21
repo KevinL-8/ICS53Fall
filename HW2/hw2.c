@@ -61,6 +61,7 @@ void sigint_handler(int sig_num){
 }
 
 void sigchld_handler(int sig_num){
+    printf("The front group id was: %d, and we get: %d from pid: %d", frgpid, getpgid(getpid()), getpid());
     if(frgpid != getpgid(getpid())){
         waiting4pid(getpid());
     }
@@ -93,7 +94,7 @@ void eval(char * instruct) {
     else if(bg == 0)
     {
         if((pid = fork()) == 0){
-            frgpid = getpgid(pid);
+            printf("Set the front group id as: %d", frgpid);
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
@@ -102,15 +103,16 @@ void eval(char * instruct) {
             }
         }
         else{
+            frgpid = getpgid(pid);
             waiting4pid(pid);
         }
     }
     else{
         if((pid = fork()) == 0){
-            // if(setgid(getpid()) != 0){
-            //     perror("setgid");
-            //     exit(0);
-            // }
+            if(setpgid(0, 0) < 0){
+                perror("setgid");
+                exit(0);
+            }
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
@@ -124,10 +126,10 @@ void eval(char * instruct) {
 int main()
 {
     int proc_id[1000];
-    signal(SIGINT, sigint_handler);
-    signal(SIGCHLD, sigchld_handler);
     while(1)
     {
+        signal(SIGINT, sigint_handler);
+        signal(SIGCHLD, sigchld_handler);
         char instruct[128];
         printf("prompt> ");
         fgets(instruct, 128, stdin);
