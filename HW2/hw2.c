@@ -10,6 +10,7 @@
 #include <fcntl.h>
 
 pid_t pid;
+pid_t frgpid;
 
 int parseline(char *source, char *dest[128])
 {
@@ -32,16 +33,6 @@ int parseline(char *source, char *dest[128])
     }
 }
 
-void quit(){
-    exit(0);
-}
-
-void sigint_handler(int sig_num){
-    if(pid > 0){
-        kill(pid, SIGINT);
-    }
-}
-
 void waiting4pid(pid_t processID){
     // printf("Child pid: %d", processID);
     int waitCondition = WUNTRACED | WCONTINUED;
@@ -59,12 +50,28 @@ void waiting4pid(pid_t processID){
     }
 }
 
+void quit(){
+    exit(0);
+}
+
+void sigint_handler(int sig_num){
+    if(pid > 0 && frgpid == getpgid(pid)){
+        kill(getpid(), SIGINT);
+    }
+}
+
+void sigchld_handler(int sig_num){
+    if(frgpid != getpgid(getpid())){
+        waiting4pid(getpid());
+    }
+}
+
 void eval(char * instruct) {
     char * argv[128];
     int bg;
     // printf("here");
     instruct[strlen(instruct)] = '\0';
-    parseline(instruct, argv);
+    bg = parseline(instruct, argv);
     if(strcmp(argv[0], "cd") == 0){
         if(chdir(argv[1]) == 0){
             printf("Changed directory to %s\n", argv[1]);
@@ -86,6 +93,7 @@ void eval(char * instruct) {
     else if(bg == 0)
     {
         if((pid = fork()) == 0){
+            frgpid = getpgid(pid);
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
@@ -96,11 +104,20 @@ void eval(char * instruct) {
         else{
             waiting4pid(pid);
         }
-    // }else if(bg == 0){
-    //     int status;
-    //     if(waitpid(pid, &status, 0) < 0){
-    //         printf("%s: Command not found.\n", argv[0]);
-    //     }
+    }
+    else{
+        if((pid = fork()) == 0){
+            // if(setgid(getpid()) != 0){
+            //     perror("setgid");
+            //     exit(0);
+            // }
+            if(execvp(argv[0], argv) < 0){
+                if(execv(argv[0], argv) < 0){
+                    perror("execv");
+                    exit(0);  
+                }
+            }
+        }
     }
 }
 
@@ -108,6 +125,7 @@ int main()
 {
     int proc_id[1000];
     signal(SIGINT, sigint_handler);
+    signal(SIGCHLD, sigchld_handler);
     while(1)
     {
         char instruct[128];
