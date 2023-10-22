@@ -10,7 +10,7 @@
 #include <fcntl.h>
 
 pid_t pid;
-pid_t frgpid;
+pid_t frpid;
 int job_index;
 struct Job{
     int job_id;
@@ -43,14 +43,15 @@ int parseline(char *source, char *dest[128])
     }
 }
 
-void waiting4pid(pid_t processID){
+pid_t waiting4pid(pid_t processID){
     // printf("Child pid: %d", processID);
     int waitCondition = WUNTRACED | WCONTINUED;
     int currentState;
     pid_t childpid;
     childpid = waitpid(processID, &currentState, waitCondition);
+    printf("Here is the returned child pid in wait function: %d", childpid);
     for(int i = 0; i < job_index; ++i){
-        if(jobs[i].pid == processID){
+        if(jobs[i].pid == childpid){
             jobs[i].status = 0;
         }
     }
@@ -63,6 +64,7 @@ void waiting4pid(pid_t processID){
     if(WIFSTOPPED(currentState)){
         printf("\n currentState = Child stopped!\n");
     }
+    return childpid;
 }
 
 void quit(){
@@ -89,10 +91,26 @@ void sigint_handler(int sig_num){
 }
 
 void sigchld_handler(int sig_num){
-    for(int i = 0; i < job_index; ++i){
-        if(jobs[i].pid == pid && jobs[i].bg == 1){
-            waiting4pid(pid);
-            jobs[i].status = 0;
+    if(frpid != pid){
+        int currentState;
+        pid_t childpid;
+        childpid = waitpid(-1, &currentState, WNOHANG);
+        printf("Here is the returned child pid in sigchld handler: %d", childpid);
+        if(childpid > 0){
+            for(int i = 0; i < job_index; ++i){
+                if(jobs[i].pid == childpid){
+                    jobs[i].status = 0;
+                }
+            }
+            if(WIFEXITED(currentState)){
+                printf("\n currentState = child exited normally!\n");
+            }
+            if(WIFSIGNALED(currentState)){
+                printf("\n currentState = Child exited with signal!\n");
+            }
+            if(WIFSTOPPED(currentState)){
+                printf("\n currentState = Child stopped!\n");
+            }
         }
     }
     // if(frgpid != getpgid(pid)){
@@ -142,7 +160,7 @@ void eval(char * instruct){
     }
     else if(bg == 0)
     {
-        if((pid = fork()) == 0){
+        if((frpid = pid = fork()) == 0){
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
@@ -192,8 +210,8 @@ void eval(char * instruct){
 int main()
 {
     pid = 0;
-    frgpid = 0;
     job_index = 1;
+    frpid = 0;
     while(1)
     {
         signal(SIGINT, sigint_handler);
