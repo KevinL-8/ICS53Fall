@@ -18,6 +18,7 @@ struct Job{
     int status;
     char cmline[128];
     int bg;
+    int finished;
 };
 struct Job jobs[1000];
 
@@ -48,11 +49,12 @@ pid_t waiting4pid(pid_t processID){
     int waitCondition = WUNTRACED | WCONTINUED;
     int currentState;
     pid_t childpid;
-    childpid = waitpid(processID, &currentState, waitCondition);
-    printf("Here is the returned child pid in wait function: %d", childpid);
     for(int i = 0; i < job_index; ++i){
-        if(jobs[i].pid == childpid){
+        if(jobs[i].pid == processID && jobs[i].finished == -1){
+            printf("Here is the returned child pid in wait function: %d\n", processID);
+            childpid = waitpid(processID, &currentState, waitCondition);
             jobs[i].status = 0;
+            jobs[i].finished += 1;
         }
     }
     if(WIFEXITED(currentState)){
@@ -77,6 +79,7 @@ void sigint_handler(int sig_num){
             printf("Killing process\n");
             kill(pid, SIGINT);
             jobs[i].status = 0;
+            jobs[i].finished += 1;
         }
     }
     // if(pid > 0 && frgpid == getpgid(pid)){
@@ -100,6 +103,7 @@ void sigchld_handler(int sig_num){
             for(int i = 0; i < job_index; ++i){
                 if(jobs[i].pid == childpid){
                     jobs[i].status = 0;
+                    jobs[i].finished += 1;
                 }
             }
             if(WIFEXITED(currentState)){
@@ -122,6 +126,16 @@ void sigchld_handler(int sig_num){
     //     }
     // }
     // }
+}
+
+void sigtstp_handler(int sig_num){
+    for(int i = 0; i < job_index; ++i){
+        if(jobs[i].pid == pid && jobs[i].bg == 0 && jobs[i].status == 1){
+            printf("Suspended process\n");
+            kill(pid, SIGTSTP);
+            jobs[i].status -= 1;
+        }
+    }
 }
 
 void eval(char * instruct){
@@ -150,11 +164,13 @@ void eval(char * instruct){
     }
     else if(strcmp(argv[0], "jobs") == 0){
         for(int i = 0; i < job_index-1; ++i){
-            if(jobs[i].status == 1){
-                printf("[%d] (%d) Running %s\n", jobs[i].job_id, jobs[i].pid, jobs[i].cmline);
-            }
-            else if(jobs[i].status == 0){
-                printf("[%d] (%d) Stopped %s\n", jobs[i].job_id, jobs[i].pid, jobs[i].cmline); 
+            if(jobs[i].finished < 1){
+                if(jobs[i].status == 1){
+                    printf("[%d] (%d) Running %s\n", jobs[i].job_id, jobs[i].pid, jobs[i].cmline);
+                }
+                else if(jobs[i].status == 0){
+                    printf("[%d] (%d) Stopped %s\n", jobs[i].job_id, jobs[i].pid, jobs[i].cmline); 
+                }
             }
         }
     }
@@ -177,6 +193,7 @@ void eval(char * instruct){
             job->status = 1;
             strcpy(job->cmline, instruct);
             job->bg = 0;
+            job->finished -= 1;
             job_index += 1;
             waiting4pid(pid);
         }
@@ -202,6 +219,7 @@ void eval(char * instruct){
             job->status = 1;
             strcpy(job->cmline, instruct);
             job->bg = 1;
+            job->finished -= 1;
             job_index += 1;
         }
     }
@@ -216,6 +234,7 @@ int main()
     {
         signal(SIGINT, sigint_handler);
         signal(SIGCHLD, sigchld_handler);
+        signal(SIGTSTP, sigtstp_handler);
         char instruct[128];
         printf("prompt> ");
         fgets(instruct, 128, stdin);
