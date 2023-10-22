@@ -72,7 +72,7 @@ void quit(){
 void sigint_handler(int sig_num){
     for(int i = 0; i < job_index; ++i){
         if(jobs[i].pid == pid && jobs[i].bg == 0 && jobs[i].status == 1){
-            printf("Killing process %d\n", pid);
+            printf("Killing process\n");
             kill(pid, SIGINT);
             jobs[i].status = 0;
         }
@@ -165,10 +165,10 @@ void eval(char * instruct){
     }
     else{
         if((pid = fork()) == 0){
-            // if(setpgid(pid, pid) < 0){
-            //     perror("setgid");
-            //     exit(0);
-            // }
+            if(setpgid(pid, pid) < 0){
+                perror("setgid");
+                exit(0);
+            }
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
@@ -177,7 +177,7 @@ void eval(char * instruct){
             }
         }
         else{
-            printf("The background job group is: %d", getpgid(pid));
+            // printf("The background job group is: %d", getpgid(pid));
             struct Job * job = &jobs[job_index - 1];
             job->job_id = job_index;
             job->pid = pid;
