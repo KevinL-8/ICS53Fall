@@ -11,6 +11,15 @@
 
 pid_t pid;
 pid_t frgpid;
+int job_index;
+struct job{
+    int job_id;
+    pid_t pid;
+    int status;
+    char cmline[128];
+};
+struct job jobs[1000];
+
 
 int parseline(char *source, char *dest[128])
 {
@@ -39,6 +48,11 @@ void waiting4pid(pid_t processID){
     int currentState;
     pid_t childpid;
     childpid = waitpid(processID, &currentState, waitCondition);
+    for(int i = 0; i < job_index; ++i){
+        if(jobs[i].pid == processID){
+            jobs[i].status = 0;
+        }
+    }
     if(WIFEXITED(currentState)){
         printf("\n currentState = child exited normally!\n");
     }
@@ -57,22 +71,34 @@ void quit(){
 void sigint_handler(int sig_num){
     if(pid > 0 && frgpid == getpgid(pid)){
         kill(getpid(), SIGINT);
+        for(int i = 0; i < job_index; ++i){
+            if(jobs[i].pid == getpid()){
+                jobs[i].status = 0;
+            }
+    }
     }
 }
 
 void sigchld_handler(int sig_num){
-    printf("The front group id was: %d, and we get: %d from pid: %d", frgpid, getpgid(getpid()), getpid());
     if(frgpid != getpgid(getpid())){
+        printf("The front group id was: %d, and we get: %d from pid: %d", frgpid, getpgid(getpid()), getpid());
         waiting4pid(getpid());
+        for(int i = 0; i < job_index; ++i){
+            if(jobs[i].pid == getpid()){
+                jobs[i].status = 0;
+            }
+        }
     }
 }
 
-void eval(char * instruct) {
+void eval(char * instruct){
     char * argv[128];
     int bg;
-    // printf("here");
     instruct[strlen(instruct)] = '\0';
+    // char * instr_copy[strlen(instruct)];
+    // strcpy(instr_copy, instruct);
     bg = parseline(instruct, argv);
+    printf("Here is the instruct received: %s\n", instruct);
     if(strcmp(argv[0], "cd") == 0){
         if(chdir(argv[1]) == 0){
             printf("Changed directory to %s\n", argv[1]);
@@ -91,10 +117,19 @@ void eval(char * instruct) {
     else if(strcmp(argv[0], "quit") == 0){
         quit();
     }
+    else if(strcmp(argv[0], "jobs") == 0){
+        for(int i = 0; i < job_index-1; ++i){
+            if(jobs[i].status == 1){
+                printf("[%d] (%d) Running %s\n", jobs[i].job_id, jobs[i].pid, jobs[i].cmline);
+            }
+            else if(jobs[i].status == 0){
+                printf("[%d] (%d) Stopped %s\n", jobs[i].job_id, jobs[i].pid, jobs[i].cmline); 
+            }
+        }
+    }
     else if(bg == 0)
     {
         if((pid = fork()) == 0){
-            printf("Set the front group id as: %d", frgpid);
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
@@ -104,6 +139,9 @@ void eval(char * instruct) {
         }
         else{
             frgpid = getpgid(pid);
+            struct job job1 = {job_index, pid, 1, *instruct};
+            jobs[job_index-1] = job1;
+            job_index += 1;
             waiting4pid(pid);
         }
     }
@@ -125,7 +163,9 @@ void eval(char * instruct) {
 
 int main()
 {
-    int proc_id[1000];
+    pid = 0;
+    frgpid = 0;
+    job_index = 1;
     while(1)
     {
         signal(SIGINT, sigint_handler);
