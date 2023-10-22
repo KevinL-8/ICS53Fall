@@ -12,13 +12,14 @@
 pid_t pid;
 pid_t frgpid;
 int job_index;
-struct job{
+struct Job{
     int job_id;
     pid_t pid;
     int status;
     char cmline[128];
+    int bg;
 };
-struct job jobs[1000];
+struct Job jobs[1000];
 
 
 int parseline(char *source, char *dest[128])
@@ -69,36 +70,48 @@ void quit(){
 }
 
 void sigint_handler(int sig_num){
-    if(pid > 0 && frgpid == getpgid(pid)){
-        kill(getpid(), SIGINT);
-        for(int i = 0; i < job_index; ++i){
-            if(jobs[i].pid == getpid()){
-                jobs[i].status = 0;
-            }
+    for(int i = 0; i < job_index; ++i){
+        if(jobs[i].pid == pid && jobs[i].bg == 0 && jobs[i].status == 1){
+            printf("Killing process %d\n", pid);
+            kill(pid, SIGINT);
+            jobs[i].status = 0;
+        }
     }
-    }
+    // if(pid > 0 && frgpid == getpgid(pid)){
+    //     printf("The front group id was: %d, and we get: %d from pid: %d", frgpid, getpgid(pid), pid); 
+    //     kill(pid, SIGINT);
+    //     for(int i = 0; i < job_index; ++i){
+    //         if(jobs[i].pid == pid){
+    //             jobs[i].status = 0;
+    //         }
+    //     }
+    // }
 }
 
 void sigchld_handler(int sig_num){
-    if(frgpid != getpgid(getpid())){
-        printf("The front group id was: %d, and we get: %d from pid: %d", frgpid, getpgid(getpid()), getpid());
-        waiting4pid(getpid());
-        for(int i = 0; i < job_index; ++i){
-            if(jobs[i].pid == getpid()){
-                jobs[i].status = 0;
-            }
+    for(int i = 0; i < job_index; ++i){
+        if(jobs[i].pid == pid && jobs[i].bg == 1){
+            waiting4pid(pid);
+            jobs[i].status = 0;
         }
     }
+    // if(frgpid != getpgid(pid)){
+    //     printf("The front group id was: %d, and we get: %d from pid: %d", frgpid, getpgid(pid), pid);
+    //     waiting4pid(pid);
+    //     for(int i = 0; i < job_index; ++i){
+    //     if(jobs[i].pid == pid){
+    //         jobs[i].status = 0;
+    //     }
+    // }
+    // }
 }
 
 void eval(char * instruct){
-    char * argv[128];
+    char  * argv[128];
     int bg;
-    instruct[strlen(instruct)] = '\0';
-    // char * instr_copy[strlen(instruct)];
-    // strcpy(instr_copy, instruct);
+    // instruct[strlen(instruct)] = '\0';
     bg = parseline(instruct, argv);
-    printf("Here is the instruct received: %s\n", instruct);
+    // printf("Here is the instruct received: %s\n", instruct);
     if(strcmp(argv[0], "cd") == 0){
         if(chdir(argv[1]) == 0){
             printf("Changed directory to %s\n", argv[1]);
@@ -138,25 +151,40 @@ void eval(char * instruct){
             }
         }
         else{
-            frgpid = getpgid(pid);
-            struct job job1 = {job_index, pid, 1, *instruct};
-            jobs[job_index-1] = job1;
+            // frgpid = getpgid(pid);
+            // printf("The front gpid is set as: %d\n", frgpid);
+            struct Job * job = &jobs[job_index - 1];
+            job->job_id = job_index;
+            job->pid = pid;
+            job->status = 1;
+            strcpy(job->cmline, instruct);
+            job->bg = 0;
             job_index += 1;
             waiting4pid(pid);
         }
     }
     else{
         if((pid = fork()) == 0){
-            if(setpgid(0, 0) < 0){
-                perror("setgid");
-                exit(0);
-            }
+            // if(setpgid(pid, pid) < 0){
+            //     perror("setgid");
+            //     exit(0);
+            // }
             if(execvp(argv[0], argv) < 0){
                 if(execv(argv[0], argv) < 0){
                     perror("execv");
                     exit(0);  
                 }
             }
+        }
+        else{
+            printf("The background job group is: %d", getpgid(pid));
+            struct Job * job = &jobs[job_index - 1];
+            job->job_id = job_index;
+            job->pid = pid;
+            job->status = 1;
+            strcpy(job->cmline, instruct);
+            job->bg = 1;
+            job_index += 1;
         }
     }
 }
